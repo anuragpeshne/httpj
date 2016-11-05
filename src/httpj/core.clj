@@ -11,15 +11,17 @@
   "I don't do a whole lot ... yet."
   [& args]
   (println "Hello, World!")
-  (let [listenerSocket (new java.net.ServerSocket PORT)
-        clientSocket (.accept listenerSocket)
-        in (new java.io.BufferedReader
-                (new java.io.InputStreamReader (.getInputStream clientSocket)))
-        out (new java.io.PrintWriter (.getOutputStream clientSocket))]
-    (println "got a connection@" (.getRemoteSocketAddress clientSocket))
-    (doseq [line (line-seq in)]
-      (.println out line)
-      (.flush out))))
+  (let [listenerSocket (new java.net.ServerSocket PORT)]
+  (while true
+    (let [clientSocket (.accept listenerSocket)
+          in (new java.io.BufferedReader
+                  (new java.io.InputStreamReader (.getInputStream clientSocket)))
+          out (new java.io.PrintWriter (.getOutputStream clientSocket))
+          clientHandler (future
+                          (println "got a connection@" (.getRemoteSocketAddress clientSocket))
+                          (doseq [line (line-seq in)]
+                            (.println out line)
+                            (.flush out)))]))))
 
 (defn clientHandler
   "This function is executed after accepting socket"
