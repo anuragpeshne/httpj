@@ -11,7 +11,7 @@
 
 (defrecord ReqHeader [method path version])
 
-(defn parseHeadLine
+(defn parse-head-line
   [line]
   (let [tokens (str/split line #" ")
         method (cond (= (str/upper-case (get tokens 0)) "GET") :GET
@@ -21,29 +21,31 @@
         version (get tokens 2)]
     (ReqHeader. method path version)))
 
-(defn generateOutput
-  [parsedReq]
+(defn generate-output
+  [parsed-req]
   (println "in generate output")
-  (str "HTTP/1.0 200 OK\r\n"
-       "Server: httpj/x.x\r\n"
-       "\r\n"
-       "Hello World!\r\n"))
+  (let [msg "Hello World!"]
+    (str "HTTP/1.1 200 OK\r\n"
+         "Server: httpj/x.x\r\n"
+         "Content-Length: " (count msg) "\r\n"
+         "\r\n"
+         msg)))
 
-(defn parseReqest
+(defn parse-reqest
   "parses and returns request obj"
   [in]
   (let [inp (line-seq in)
-        headLine (parseHeadLine (first inp))
-        headers (loop [curInp (rest inp) list []]
-                  (if (or (= (first curInp) "") (nil? (first curInp))) list
-                      (recur (rest curInp)
+        head-line (parse-head-line (first inp))
+        headers (loop [cur-inp (rest inp) list []]
+                  (if (or (= (first cur-inp) "") (nil? (first cur-inp))) list
+                      (recur (rest cur-inp)
                              (conj list (apply hash-map
-                                               (str/split (first curInp) #": "))))))]
+                                               (str/split (first cur-inp) #": "))))))]
     (println "printing headers")
     (clojure.pprint/pprint headers)
-    {:headLine headLine, :headers headers}))
+    {:headLine head-line, :headers headers}))
 
-(defn handleClient
+(defn handle-client
   "This function is executed after accepting socket"
   [socket]
   (let [in (new java.io.BufferedReader
@@ -51,15 +53,14 @@
         out (new java.io.PrintWriter (.getOutputStream socket))
         clientHandler (future
                         (println "got a connection@" (.getRemoteSocketAddress socket))
-                        (.print out (generateOutput (parseReqest in)))
-                        (.flush out)
-                        (.close socket))]))
+                        (.print out (generate-output (parse-reqest in)))
+                        (.flush out))]))
 
 (defn -main
   "Starting point for httpj"
   [& args]
   (println "Server ready.")
-  (let [listenerSocket (new java.net.ServerSocket PORT)]
+  (let [listener-socket (new java.net.ServerSocket PORT)]
     (while true
-      (let [clientSocket (.accept listenerSocket)]
-        (handleClient clientSocket)))))
+      (let [client-socket (.accept listener-socket)]
+        (handle-client client-socket)))))
