@@ -1,7 +1,8 @@
 (ns httpj.core
   (:gen-class)
   (:require [clojure.string :as str]
-            [clojure.pprint])
+            [clojure.pprint]
+            [httpj.file-server])
   (:import [java.net.ServerSocket]
            [java.net.Socket]
            [java.io.BufferedReader]
@@ -24,12 +25,14 @@
 (defn generate-output
   [parsed-req]
   (println "in generate output")
-  (let [msg "Hello World!"]
+  (let [msg (httpj.file-server/get-file (str "." (-> parsed-req :headLine :path)))]
+    (println (count msg))
     (str "HTTP/1.1 200 OK\r\n"
          "Server: httpj/x.x\r\n"
          "Content-Length: " (count msg) "\r\n"
          "\r\n"
-         msg)))
+         msg
+         "\r\n")))
 
 (defn parse-reqest
   "parses and returns request obj"
