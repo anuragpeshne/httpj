@@ -24,15 +24,20 @@
 
 (defn generate-output
   [parsed-req]
-  (println "in generate output")
   (let [msg (httpj.file-server/get-file (str "." (-> parsed-req :headLine :path)))]
-    (println (count msg))
-    (str "HTTP/1.1 200 OK\r\n"
-         "Server: httpj/x.x\r\n"
-         "Content-Length: " (count msg) "\r\n"
-         "\r\n"
-         msg
-         "\r\n")))
+    (if (nil? msg) (let [msg "404: Not Found"]
+                     (str "HTTP/1.1 404 Not Found\r\n"
+                          "Server: httpj/x.x\r\n"
+                          "Content-Length: " (count msg) "\r\n"
+                          "\r\n"
+                          msg
+                          "\r\n"))
+        (str "HTTP/1.1 200 OK\r\n"
+             "Server: httpj/x.x\r\n"
+             "Content-Length: " (count msg) "\r\n"
+             "\r\n"
+             msg
+             "\r\n"))))
 
 (defn parse-reqest
   "parses and returns request obj"
@@ -44,8 +49,6 @@
                       (recur (rest cur-inp)
                              (conj list (apply hash-map
                                                (str/split (first cur-inp) #": "))))))]
-    (println "printing headers")
-    (clojure.pprint/pprint headers)
     {:headLine head-line, :headers headers}))
 
 (defn handle-client
