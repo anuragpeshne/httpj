@@ -5,6 +5,7 @@
             [httpj.file-server])
   (:import [java.net.ServerSocket]
            [java.net.Socket]
+           [java.io.File]
            [java.io.BufferedReader]
            [java.io.InputStreamReader]))
 
@@ -22,22 +23,33 @@
         version (get tokens 2)]
     (ReqHeader. method path version)))
 
-(defn generate-output
-  [parsed-req]
-  (let [msg (httpj.file-server/get-file (str "." (-> parsed-req :headLine :path)))]
-    (if (nil? msg) (let [msg "404: Not Found"]
-                     (str "HTTP/1.1 404 Not Found\r\n"
-                          "Server: httpj/x.x\r\n"
-                          "Content-Length: " (count msg) "\r\n"
-                          "\r\n"
-                          msg
-                          "\r\n"))
-        (str "HTTP/1.1 200 OK\r\n"
-             "Server: httpj/x.x\r\n"
-             "Content-Length: " (count msg) "\r\n"
-             "\r\n"
-             msg
-             "\r\n"))))
+(defn generate-header
+  [code content-len]
+  (let [status
+        (condp = code
+          :404 "404 Not Found"
+          :200 " 200 OK")]
+    (str (reduce #(str %1 "\r\n" %2) [(str "HTTP/1.1 " status)
+                                      "Server: httpj/x.x"
+                                      ;;"Content-Type: text/html"
+                                      (str "Content-Length: " content-len)])
+         "\r\n\r\n")))
+
+(defn send-response
+  [parsed-req out]
+  (let [file (httpj.file-server/get-file (str "." (-> parsed-req :headLine :path)))]
+    (if (nil? file)
+      (let [msg "404: Not Found!\r\n"]
+        (.print out (generate-header :404 (count msg)))
+        (.print out msg)
+        (.flush out))
+      (do
+        (.print out (generate-header :200 (.length file)))
+        (with-open [rdr (clojure.java.io/reader file)]
+          (doseq [line (line-seq rdr)]
+            (.println out line)))
+        (.print out "\r\n")
+        (.flush out)))))
 
 (defn parse-reqest
   "parses and returns request obj"
@@ -59,8 +71,7 @@
         out (new java.io.PrintWriter (.getOutputStream socket))
         clientHandler (future
                         (println "got a connection@" (.getRemoteSocketAddress socket))
-                        (.print out (generate-output (parse-reqest in)))
-                        (.flush out))]))
+                        (send-response (parse-reqest in) out))]))
 
 (defn -main
   "Starting point for httpj"
