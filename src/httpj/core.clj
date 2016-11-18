@@ -10,6 +10,24 @@
            [java.io.InputStreamReader]))
 
 (def PORT 8080)
+(def mimes
+  {"css" "text/css"
+   "csv" "text/csv"
+   "doc" "application/msword"
+   "epub" "application/epub+zip"
+   "gif" "image/gif"
+   "htm" "text/html"
+   "html" "text/html"
+   "ico" "image/x-icon"
+   "jpeg" "image/jpeg"
+   "jpg" "image/jpeg"
+   "js" "application/js"
+   "json" "application/json"
+   "md" "text/plain"
+   "pdf" "application/pdf"
+   "svg" "image/svg+xml"
+   "xml" "application/xml"
+   "zip" "application/zip"})
 
 (defrecord ReqHeader [method path version])
 
@@ -24,14 +42,21 @@
     (ReqHeader. method path version)))
 
 (defn generate-header
-  [code content-len]
-  (let [status
-        (condp = code
-          :404 "404 Not Found"
-          :200 " 200 OK")]
+  [code file & args]
+  (let [status (condp = code
+                 :404 "404 Not Found"
+                 :200 "200 OK"
+                 "501 Not Implemented")
+        mime-type (if (or (nil? file) (= (.lastIndexOf (.getName file) ".") -1))
+                    "text/plain"
+                    (get mimes (subs (.getName file)
+                                     (+ (.lastIndexOf (.getName file) ".") 1))))
+        content-len (if (nil? file)
+                      (first args)
+                      (.length file))]
     (str (reduce #(str %1 "\r\n" %2) [(str "HTTP/1.1 " status)
                                       "Server: httpj/x.x"
-                                      ;;"Content-Type: text/html"
+                                      (str "Content-Type: " mime-type)
                                       (str "Content-Length: " content-len)])
          "\r\n\r\n")))
 
@@ -40,11 +65,11 @@
   (let [file (httpj.file-server/get-file (str "." (-> parsed-req :headLine :path)))]
     (if (nil? file)
       (let [msg "404: Not Found!\r\n"]
-        (.print out (generate-header :404 (count msg)))
+        (.print out (generate-header :404 nil (count msg)))
         (.print out msg)
         (.flush out))
       (do
-        (.print out (generate-header :200 (.length file)))
+        (.print out (generate-header :200 file))
         (with-open [rdr (clojure.java.io/reader file)]
           (doseq [line (line-seq rdr)]
             (.println out line)))
