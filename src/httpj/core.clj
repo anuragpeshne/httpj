@@ -47,13 +47,13 @@
                  :404 "404 Not Found"
                  :200 "200 OK"
                  "501 Not Implemented")
-        mime-type (if (or (nil? file) (= (.lastIndexOf (.getName file) ".") -1))
+        file-meta (meta file)
+        mime-type (if (or (nil? file) (= (:ext file-meta) ""))
                     "text/plain"
-                    (get mimes (subs (.getName file)
-                                     (+ (.lastIndexOf (.getName file) ".") 1))))
+                    (get mimes (:ext file-meta)))
         content-len (if (nil? file)
                       (first args)
-                      (.length file))]
+                      (:length file-meta))]
     (str (reduce #(str %1 "\r\n" %2) [(str "HTTP/1.1 " status)
                                       "Server: httpj/x.x"
                                       (str "Content-Type: " mime-type)
@@ -61,20 +61,20 @@
          "\r\n\r\n")))
 
 (defn send-response
-  [parsed-req out]
-  (let [file (httpj.file-server/get-file (str "." (-> parsed-req :headLine :path)))]
+  [parsed-req out out-bin]
+  (let [file (httpj.file-server/get-file
+              (str "." (-> parsed-req :headLine :path)))
+        file-meta (meta file)]
     (if (nil? file)
       (let [msg "404: Not Found!\r\n"]
-        (.print out (generate-header :404 nil (count msg)))
-        (.print out msg)
-        (.flush out))
+        (doto out
+          (.print (generate-header :404 nil (count msg)))
+          (.print msg)
+          .flush ))
       (do
-        (.print out (generate-header :200 file))
-        (with-open [rdr (clojure.java.io/reader file)]
-          (doseq [line (line-seq rdr)]
-            (.println out line)))
-        (.print out "\r\n")
-        (.flush out)))))
+        (doto out (.print (generate-header :200 file)) .flush)
+        (doto out-bin (.write out-bin file 0 (:length file-meta)) .flush)
+        (doto out (.print "\r\n") .flush)))))
 
 (defn parse-reqest
   "parses and returns request obj"
@@ -94,9 +94,10 @@
   (let [in (new java.io.BufferedReader
                 (new java.io.InputStreamReader (.getInputStream socket)))
         out (new java.io.PrintWriter (.getOutputStream socket))
+        out-bin (new java.io.BufferedOutputStream (.getOutputStream socket))
         clientHandler (future
                         (println "got a connection@" (.getRemoteSocketAddress socket))
-                        (send-response (parse-reqest in) out))]))
+                        (send-response (parse-reqest in) out out-bin))]))
 
 (defn -main
   "Starting point for httpj"

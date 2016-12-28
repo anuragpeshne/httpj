@@ -2,7 +2,9 @@
   (:gen-class)
   (:require [clojure.core.cache :as cache])
   (:import [java.io.FileNotFoundException]
-           [java.io.File]))
+           [java.nio.file.Files]
+           [java.nio.file.Path]
+           [java.nio.file.Paths]))
 
 (def file-cache (atom (cache/lu-cache-factory {})))
 
@@ -11,10 +13,21 @@
   (if (cache/has? @file-cache file-path)
     ;;(cache/hit @file-cache file-path)
     (get @file-cache file-path)
-    (let [f (new java.io.File file-path)]
-      (if (and (.exists f) (not (.isDirectory f)))
-        (do
+    (let [file (java.nio.file.Paths/get "" (into-array [file-path]))]
+      (if (java.nio.file.Files/isReadable file)
+        (let [file-bytes (java.nio.file.Files/readAllBytes file)
+              file-metaful (let [file-name (-> file .getFileName .toString)]
+                             (with-meta file-bytes
+                               {:length (count file-bytes)
+                                :name file-name
+                                :ext (if (= (.lastIndexOf file-name ".") -1)
+                                       ;; the case when there is no extension
+                                       ""
+                                       (subs file-name
+                                             (+ (.lastIndexOf file-name ".") 1)))
+                                :last-modified (.getLastModifiedTime file)}))]
           (println (str "File miss" file-path))
-          (swap! file-cache #(cache/miss % file-path f))
-          f)
+          (swap! file-cache #(cache/miss % file-path file-bytes))
+          file-bytes) ;;return file-bytes
+        ;; else: if file not found or is unreadable
         nil))))
