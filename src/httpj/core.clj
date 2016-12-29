@@ -73,7 +73,8 @@
           .flush ))
       (do
         (doto out (.print (generate-header :200 file)) .flush)
-        (doto out-bin (.write out-bin file 0 (:length file-meta)) .flush)
+        (clojure.java.io/copy (:bytes file) out-bin)
+        (.flush out-bin)
         (doto out (.print "\r\n") .flush)))))
 
 (defn parse-reqest
