@@ -9,7 +9,8 @@
            [java.io.BufferedReader]
            [java.io.InputStreamReader]))
 
-(def PORT 8080)
+(def port 8080)
+(def debug false)
 (def mimes
   {"css" "text/css"
    "csv" "text/csv"
@@ -38,7 +39,11 @@
                      (= (str/upper-case (get tokens 0)) "POST") :POST
                      :else "unknown") ;;probably throw exception
         path (get tokens 1)
-        version (get tokens 2)]
+        version (condp = (get tokens 2)
+                  "HTTP/1.0" :HTTP-1
+                  "HTTP/1.1" :HTTP-1.1
+                  "HTTP/2.0" :HTTP-2
+                  "Unknown Version")]
     (ReqHeader. method path version)))
 
 (defn generate-header
@@ -63,7 +68,7 @@
 (defn send-response
   [parsed-req out out-bin]
   (let [file (httpj.file-server/get-file
-              (str "." (-> parsed-req :headLine :path)))
+              (str "." (-> parsed-req :head-line :path)))
         file-meta (meta file)]
     (if (nil? file)
       (let [msg "404: Not Found!\r\n"]
@@ -75,7 +80,9 @@
         (doto out (.print (generate-header :200 file)) .flush)
         (clojure.java.io/copy (:bytes file) out-bin)
         (.flush out-bin)
-        (doto out (.print "\r\n") .flush)))))
+        (doto out (.print "\r\n") .flush)
+        (if (= :HTTP-1 (-> parsed-req :head-line :version))
+          (.close out-bin))))))
 
 (defn parse-reqest
   "parses and returns request obj"
@@ -87,24 +94,25 @@
                       (recur (rest cur-inp)
                              (conj list (apply hash-map
                                                (str/split (first cur-inp) #": "))))))]
-    {:headLine head-line, :headers headers}))
+    {:head-line head-line, :headers headers}))
 
 (defn handle-client
   "This function is executed after accepting socket"
   [socket]
-  (let [in (new java.io.BufferedReader
-                (new java.io.InputStreamReader (.getInputStream socket)))
-        out (new java.io.PrintWriter (.getOutputStream socket))
-        out-bin (new java.io.BufferedOutputStream (.getOutputStream socket))
+  (let [in (java.io.BufferedReader.
+                (java.io.InputStreamReader. (.getInputStream socket)))
+        out (java.io.PrintWriter. (.getOutputStream socket))
+        out-bin (java.io.BufferedOutputStream. (.getOutputStream socket))
         clientHandler (future
-                        (println "got a connection@" (.getRemoteSocketAddress socket))
+                        (if debug
+                          (println "got a connection@" (.getRemoteSocketAddress socket)))
                         (send-response (parse-reqest in) out out-bin))]))
 
 (defn -main
   "Starting point for httpj"
   [& args]
   (println "Server ready.")
-  (let [listener-socket (new java.net.ServerSocket PORT)]
+  (let [listener-socket (java.net.ServerSocket. port)]
     (while true
       (let [client-socket (.accept listener-socket)]
         (handle-client client-socket)))))
