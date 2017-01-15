@@ -80,9 +80,7 @@
         (doto out (.print (generate-header :200 file)) .flush)
         (clojure.java.io/copy (:bytes file) out-bin)
         (.flush out-bin)
-        (doto out (.print "\r\n") .flush)
-        (if (= :HTTP-1 (-> parsed-req :head-line :version))
-          (.close out-bin))))))
+        (doto out (.print "\r\n") .flush)))))
 
 (defn parse-reqest
   "parses and returns request obj"
@@ -106,7 +104,11 @@
         clientHandler (future
                         (if debug
                           (println "got a connection@" (.getRemoteSocketAddress socket)))
-                        (send-response (parse-reqest in) out out-bin))]))
+                        (let [parsed-req (parse-reqest in)]
+                          (send-response parsed-req out out-bin)
+                          (if (or (= :HTTP-1 (-> parsed-req :head-line :version))
+                                  (= "close" (get (:headers parsed-req) "Connection")))
+                            (.close socket))))]))
 
 (defn -main
   "Starting point for httpj"
